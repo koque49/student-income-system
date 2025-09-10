@@ -1,5 +1,7 @@
 // 仪表盘页面的JavaScript代码
 let incomeChart = null;
+let currentUser = null;
+let accessToken = '';
 
 // 页面加载完成后初始化仪表盘
 document.addEventListener('DOMContentLoaded', function() {
@@ -27,6 +29,12 @@ function initializeDashboard() {
         
         // 绑定退出按钮
         document.getElementById('logoutBtn').addEventListener('click', logout);
+        
+        // 绑定刷新按钮（如果存在）
+        const refreshBtn = document.getElementById('refreshBtn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', refreshData);
+        }
         
         // 加载和显示数据
         loadDashboardData();
@@ -131,25 +139,31 @@ function getUserRecords() {
 function updateStatCards(userRecords) {
     console.log('更新统计卡片:', userRecords);
     
-    const todayString = getTodayString();
+    // 使用最新记录作为今日数据（因为测试数据可能日期不是今天）
+    const latestRecord = userRecords.length > 0 ? userRecords[0] : null;
     
-    // 今日收益
-    const todayRecord = userRecords.find(record => record.date === todayString);
-    const todayIncome = todayRecord ? todayRecord.dailyIncome : 0;
-    const monthlyTotal = todayRecord ? todayRecord.monthlyTotal : 0;
+    if (latestRecord) {
+        // 今日收益（使用最新记录）
+        document.getElementById('todayIncome').textContent = formatMoney(latestRecord.dailyIncome);
+        document.getElementById('todayDate').textContent = formatDate(latestRecord.date);
+        
+        // 本月累计（使用最新记录）
+        document.getElementById('monthIncome').textContent = formatMoney(latestRecord.monthlyTotal);
+    } else {
+        // 没有数据时显示0
+        document.getElementById('todayIncome').textContent = '¥0.00';
+        document.getElementById('todayDate').textContent = formatDate(getTodayString());
+        document.getElementById('monthIncome').textContent = '¥0.00';
+    }
     
-    document.getElementById('todayIncome').textContent = formatMoney(todayIncome);
-    document.getElementById('todayDate').textContent = formatDate(todayString);
-    
-    // 本月累计
-    document.getElementById('monthIncome').textContent = formatMoney(monthlyTotal);
-    
-    // 近7天平均
-    const last7Days = userRecords.slice(0, 7);
+    // 近7天平均（保持原有逻辑）
+    const last7Days = userRecords.slice(0, Math.min(7, userRecords.length));
     const avgIncome = last7Days.length > 0 
         ? last7Days.reduce((sum, record) => sum + record.dailyIncome, 0) / last7Days.length 
         : 0;
     document.getElementById('avgIncome').textContent = formatMoney(avgIncome);
+    
+    console.log('统计卡片更新完成 - 今日:', latestRecord?.dailyIncome, '月累计:', latestRecord?.monthlyTotal, '平均:', avgIncome);
 }
 
 // 更新收益趋势图
@@ -168,7 +182,7 @@ function updateIncomeChart(userRecords) {
     }
     
     // 准备图表数据（最近30天）
-    const last30Days = userRecords.slice(0, 30).reverse(); // 反转以时间正序显示
+    const last30Days = userRecords.slice(0, Math.min(30, userRecords.length)).reverse(); // 反转以时间正序显示
     const labels = last30Days.map(record => formatDate(record.date).substring(5)); // 只显示月-日
     const dailyData = last30Days.map(record => record.dailyIncome);
     const monthlyData = last30Days.map(record => record.monthlyTotal);
@@ -266,13 +280,47 @@ function showNoDataMessage() {
     document.getElementById('avgIncome').textContent = '¥0.00';
     
     const historyBody = document.getElementById('historyBody');
-    historyBody.innerHTML = '<tr><td colspan="3" class="loading">暂无收益记录</td></tr>';
+    if (historyBody) {
+        historyBody.innerHTML = '<tr><td colspan="3" class="loading">暂无收益记录</td></tr>';
+    }
 }
 
 // 显示错误信息
 function showError(message) {
     console.error('显示错误:', message);
     alert(message + '\n\n请尝试：\n1. 刷新页面\n2. 重新登录');
+}
+
+// 刷新数据
+async function refreshData() {
+    console.log('手动刷新数据...');
+    
+    const refreshBtn = document.getElementById('refreshBtn');
+    if (!refreshBtn) return;
+    
+    const originalText = refreshBtn.textContent;
+    
+    try {
+        // 显示加载状态
+        refreshBtn.textContent = '🔄 加载中...';
+        refreshBtn.disabled = true;
+        
+        // 清除缓存，强制重新获取数据
+        currentUser.allData = null;
+        
+        // 重新加载数据
+        await loadDashboardData();
+        
+        console.log('数据刷新成功');
+        
+    } catch (error) {
+        console.error('数据刷新失败:', error);
+        alert('刷新失败: ' + error.message);
+    } finally {
+        // 恢复按钮状态
+        refreshBtn.textContent = originalText;
+        refreshBtn.disabled = false;
+    }
 }
 
 // 退出登录
@@ -282,7 +330,7 @@ function logout() {
     window.location.href = 'index.html';
 }
 
-// 获取访问令牌的函数（从script.js复制）
+// 获取访问令牌的函数
 async function getAccessToken() {
     try {
         const response = await fetch('/.netlify/functions/feishu-proxy', {
@@ -308,7 +356,7 @@ async function getAccessToken() {
     }
 }
 
-// 获取表格数据的函数（从script.js复制）
+// 获取表格数据的函数
 async function getSheetData() {
     try {
         if (!accessToken && !(await getAccessToken())) {
@@ -338,7 +386,7 @@ async function getSheetData() {
     }
 }
 
-// 工具函数（从script.js复制）
+// 工具函数
 function formatMoney(amount) {
     if (!amount || isNaN(amount)) return '¥0.00';
     return '¥' + parseFloat(amount).toFixed(2);
