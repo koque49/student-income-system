@@ -15,17 +15,16 @@ function initializePage() {
     }
 }
 
-// 获取飞书访问令牌
+// 获取飞书访问令牌（通过Netlify函数）
 async function getAccessToken() {
     try {
-        const response = await fetch(CORS_PROXY + CONFIG.FEISHU_API_BASE + '/auth/v3/tenant_access_token/internal', {
+        const response = await fetch('/.netlify/functions/feishu-proxy', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                app_id: CONFIG.FEISHU_APP_ID,
-                app_secret: CONFIG.FEISHU_APP_SECRET
+                action: 'getToken'
             })
         });
         
@@ -42,21 +41,22 @@ async function getAccessToken() {
     }
 }
 
-// 获取表格数据
+// 获取表格数据（通过Netlify函数）
 async function getSheetData() {
     try {
         if (!accessToken && !(await getAccessToken())) {
             throw new Error('无法获取访问令牌');
         }
         
-        const url = `${CORS_PROXY}${CONFIG.FEISHU_API_BASE}/sheets/v2/spreadsheets/${CONFIG.SPREADSHEET_TOKEN}/values/Sheet1!A:E`;
-        
-        const response = await fetch(url, {
-            method: 'GET',
+        const response = await fetch('/.netlify/functions/feishu-proxy', {
+            method: 'POST',
             headers: {
-                'Authorization': `Bearer ${accessToken}`,
                 'Content-Type': 'application/json'
-            }
+            },
+            body: JSON.stringify({
+                action: 'getData',
+                token: accessToken
+            })
         });
         
         const data = await response.json();
@@ -71,7 +71,7 @@ async function getSheetData() {
     }
 }
 
-// 处理登录
+// 处理登录（保持不变）
 async function handleLogin(event) {
     event.preventDefault();
     
@@ -129,13 +129,12 @@ async function handleLogin(event) {
     }
 }
 
-// 格式化金额
+// 其他函数保持不变
 function formatMoney(amount) {
     if (!amount || isNaN(amount)) return '¥0.00';
     return '¥' + parseFloat(amount).toFixed(2);
 }
 
-// 格式化日期
 function formatDate(dateStr) {
     if (!dateStr) return '';
     const date = new Date(dateStr);
@@ -148,7 +147,6 @@ function formatDate(dateStr) {
     return `${year}-${month}-${day}`;
 }
 
-// 获取今天的日期字符串
 function getTodayString() {
     const today = new Date();
     const year = today.getFullYear();
