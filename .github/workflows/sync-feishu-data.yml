@@ -1,0 +1,241 @@
+name: 自动同步飞书收益数据
+
+on:
+  schedule:
+    # 每天早上8点和晚上8点同步（UTC时间，北京时间+8）
+    - cron: '0 0 * * *'   # 北京时间早上8点
+    - cron: '0 12 * * *'  # 北京时间晚上8点
+  workflow_dispatch:  # 允许手动触发
+  push:
+    branches: [ main ]  # 代码更新时也触发
+
+jobs:
+  sync-data:
+    runs-on: ubuntu-latest
+    name: 同步飞书数据并部署
+    
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 设置Node.js环境
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: 创建数据目录
+        run: |
+          mkdir -p data
+          echo "数据目录创建完成"
+
+      - name: 获取飞书访问令牌
+        id: get-token
+        run: |
+          echo "正在获取飞书访问令牌..."
+          
+          RESPONSE=$(curl -s -X POST "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "app_id": "cli_a84a4855cb36500b",
+              "app_secret": "NJxiXZAZLLZcVJ2Mh9dzmb0W8vioZNRM"
+            }')
+          
+          echo "令牌响应: $RESPONSE"
+          
+          # 提取token
+          TOKEN=$(echo $RESPONSE | jq -r '.tenant_access_token // empty')
+          
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            echo "❌ 获取访问令牌失败"
+            echo $RESPONSE | jq '.'
+            exit 1
+          fi
+          
+          echo "✅ 访问令牌获取成功"
+          echo "FEISHU_TOKEN=$TOKEN" >> $GITHUB_OUTPUT
+
+      - name: 同步飞书表格数据
+        run: |
+          echo "正在同步飞书表格数据..."
+          
+          # 获取当前时间
+          SYNC_TIME=$(date '+%Y-%m-%d %H:%M:%S')
+          echo "同步时间: $SYNC_TIME"
+          
+          # 调用飞书API获取数据
+          RESPONSE=$(curl -s -X GET \
+            "https://open.feishu.cn/open-apis/sheets/v4/spreadsheets/Je42sildNh5sJAtktSlc0azDnsb/values/R6PBsw!A1:E1000" \
+            -H "Authorization: Bearer ${{ steps.get-token.outputs.FEISHU_TOKEN }}" \
+            -H "Content-Type: application/json")
+          
+          echo "数据响应状态: $(echo $RESPONSE | jq -r '.code // "unknown"')"
+          
+          # 检查响应是否成功
+          CODE=$(echo $RESPONSE | jq -r '.code // -1')
+          if [ "$CODE" != "0" ]; then
+            echo "❌ 获取表格数据失败"
+            echo $RESPONSE | jq '.'
+            exit 1
+          fi
+          
+          # 保存完整响应数据
+          echo $RESPONSE > data/feishu-raw-response.json
+          
+          # 提取values数据并保存
+          echo $RESPONSE | jq '.data.values // []' > data/income-data.json
+          
+          # 创建带时间戳的备份
+          cp data/income-data.json "data/backup-$(date '+%Y%m%d-%H%M%S').json"
+          
+          # 检查数据行数
+          ROWS=$(echo $RESPONSE | jq '.data.values | length // 0')
+          echo "✅ 成功获取 $ROWS 行数据"
+          
+          # 生成同步报告
+          cat > data/sync-report.json << EOF
+          {
+            "lastSync": "$SYNC_TIME",
+            "dataRows": $ROWS,
+            "status": "success",
+            "source": "feishu-sheets",
+            "version": "$(date '+%Y%m%d%H%M%S')"
+          }
+          EOF
+          
+          echo "数据同步完成！"
+
+      - name: 转换为CSV格式（兼容性）
+        run: |
+          echo "转换数据为CSV格式..."
+          
+          # 使用Node.js转换JSON为CSV
+          cat > convert-to-csv.js << 'EOF'
+          const fs = require('fs');
+          
+          try {
+            const data = JSON.parse(fs.readFileSync('data/income-data.json', 'utf8'));
+            
+            if (!Array.isArray(data) || data.length === 0) {
+              console.log('无数据需要转换');
+              process.exit(0);
+            }
+            
+            // 转换为CSV格式
+            const csvLines = data.map(row => {
+              return Array.isArray(row) ? row.map(cell => 
+                typeof cell === 'string' && cell.includes(',') 
+                  ? `"${cell}"` 
+                  : cell
+              ).join(',') : '';
+            });
+            
+            const csvContent = csvLines.join('\n');
+            fs.writeFileSync('data/income-data.csv', csvContent);
+            
+            console.log(`✅ CSV转换完成，共${data.length}行数据`);
+          } catch (error) {
+            console.error('CSV转换失败:', error.message);
+            process.exit(1);
+          }
+          EOF
+          
+          node convert-to-csv.js
+
+      - name: 验证数据完整性
+        run: |
+          echo "验证数据完整性..."
+          
+          # 检查JSON文件
+          if [ ! -f "data/income-data.json" ]; then
+            echo "❌ JSON数据文件不存在"
+            exit 1
+          fi
+          
+          # 检查CSV文件
+          if [ ! -f "data/income-data.csv" ]; then
+            echo "❌ CSV数据文件不存在"
+            exit 1
+          fi
+          
+          # 检查文件大小
+          JSON_SIZE=$(stat -c%s "data/income-data.json")
+          CSV_SIZE=$(stat -c%s "data/income-data.csv")
+          
+          echo "文件大小检查:"
+          echo "  JSON: ${JSON_SIZE} bytes"
+          echo "  CSV: ${CSV_SIZE} bytes"
+          
+          if [ "$JSON_SIZE" -lt 50 ]; then
+            echo "❌ JSON文件过小，可能数据不完整"
+            exit 1
+          fi
+          
+          echo "✅ 数据完整性验证通过"
+
+      - name: 提交更新的数据
+        run: |
+          echo "提交数据更新..."
+          
+          # 配置Git
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "GitHub Actions Bot"
+          
+          # 添加所有数据文件
+          git add data/
+          
+          # 检查是否有变更
+          if git diff --cached --quiet; then
+            echo "📊 数据无变更，跳过提交"
+          else
+            # 创建提交信息
+            SYNC_TIME=$(date '+%Y-%m-%d %H:%M:%S')
+            ROWS=$(jq 'length // 0' data/income-data.json 2>/dev/null || echo "0")
+            
+            git commit -m "🔄 自动同步数据 | ${SYNC_TIME} | ${ROWS}行数据" || {
+              echo "提交失败，但继续执行"
+            }
+            
+            # 推送到仓库
+            git push || {
+              echo "⚠️ 推送失败，可能是并发问题"
+              git pull --rebase
+              git push
+            }
+            
+            echo "✅ 数据已成功提交并推送"
+          fi
+
+      - name: 清理临时文件
+        run: |
+          echo "清理临时文件..."
+          rm -f convert-to-csv.js
+          
+          # 只保留最新的5个备份文件
+          cd data
+          ls -t backup-*.json | tail -n +6 | xargs -r rm
+          echo "✅ 清理完成"
+
+      - name: 同步状态总结
+        run: |
+          echo "========== 同步状态总结 =========="
+          echo "⏰ 同步时间: $(date '+%Y-%m-%d %H:%M:%S')"
+          
+          if [ -f "data/income-data.json" ]; then
+            ROWS=$(jq 'length // 0' data/income-data.json)
+            echo "📊 数据行数: $ROWS"
+            echo "📁 文件大小: $(stat -c%s data/income-data.json) bytes"
+          fi
+          
+          echo "🔗 数据源: 飞书在线表格"
+          echo "✅ 同步状态: 成功完成"
+          echo "================================="
+
+      # 如果同步失败，发送通知
+      - name: 同步失败通知
+        if: failure()
+        run: |
+          echo "❌ 数据同步失败！"
+          echo "时间: $(date '+%Y-%m-%d %H:%M:%S')"
+          echo "请检查飞书API权限和网络连接"
