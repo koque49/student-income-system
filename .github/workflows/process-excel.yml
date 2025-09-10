@@ -1,0 +1,135 @@
+name: 处理Excel数据文件
+
+on:
+  push:
+    paths:
+      - 'data/*.xlsx'
+      - 'data/*.xls'
+  workflow_dispatch:
+
+jobs:
+  process-excel:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: 设置Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          
+      - name: 安装依赖
+        run: |
+          npm init -y
+          npm install xlsx fs path
+          
+      - name: 处理Excel文件
+        run: |
+          cat > process-excel.js << 'EOF'
+          const XLSX = require('xlsx');
+          const fs = require('fs');
+          const path = require('path');
+
+          console.log('🔍 开始处理Excel文件...');
+
+          // 查找Excel文件
+          const dataDir = './data';
+          let excelFile = null;
+
+          if (fs.existsSync(dataDir)) {
+            const files = fs.readdirSync(dataDir);
+            excelFile = files.find(file => 
+              file.endsWith('.xlsx') || file.endsWith('.xls')
+            );
+          }
+
+          if (!excelFile) {
+            console.log('❌ 未找到Excel文件');
+            process.exit(1);
+          }
+
+          const filePath = path.join(dataDir, excelFile);
+          console.log('📂 找到Excel文件:', filePath);
+
+          try {
+            // 读取Excel文件
+            const workbook = XLSX.readFile(filePath);
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            
+            console.log('📊 工作表名称:', sheetName);
+
+            // 转换为数组
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+              header: 1,
+              raw: false,
+              defval: ''
+            });
+
+            console.log('✅ 数据解析成功，行数:', jsonData.length);
+
+            // 保存为JSON
+            const outputFile = path.join(dataDir, 'income-data.json');
+            fs.writeFileSync(outputFile, JSON.stringify(jsonData, null, 2));
+
+            // 创建处理报告
+            const report = {
+              processTime: new Date().toISOString(),
+              sourceFile: excelFile,
+              rowCount: jsonData.length,
+              status: 'success',
+              lastUpdate: new Date().toLocaleString('zh-CN', {
+                timeZone: 'Asia/Shanghai'
+              })
+            };
+
+            fs.writeFileSync(
+              path.join(dataDir, 'process-report.json'),
+              JSON.stringify(report, null, 2)
+            );
+
+            console.log('💾 数据处理完成');
+            console.log('📋 处理报告:', report);
+
+          } catch (error) {
+            console.error('❌ 处理Excel文件失败:', error);
+            
+            // 创建错误报告
+            const errorReport = {
+              processTime: new Date().toISOString(),
+              sourceFile: excelFile,
+              status: 'error',
+              error: error.message
+            };
+
+            fs.writeFileSync(
+              path.join(dataDir, 'process-report.json'),
+              JSON.stringify(errorReport, null, 2)
+            );
+
+            process.exit(1);
+          }
+          EOF
+
+          node process-excel.js
+
+      - name: 提交处理结果
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "GitHub Actions"
+          
+          git add data/*.json
+          
+          if git diff --cached --quiet; then
+            echo "📊 数据无变更"
+          else
+            git commit -m "🔄 自动处理Excel数据 $(date '+%Y-%m-%d %H:%M:%S')"
+            git push
+            echo "✅ 数据处理完成并提交"
+          fi
