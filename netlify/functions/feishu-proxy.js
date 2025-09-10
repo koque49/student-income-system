@@ -1,8 +1,8 @@
-// Netlify云函数 - 处理飞书API请求
 const https = require('https');
 
 exports.handler = async (event, context) => {
-    // 设置CORS头，允许跨域访问
+    console.log('云函数调用:', event.httpMethod);
+
     const headers = {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
@@ -10,20 +10,15 @@ exports.handler = async (event, context) => {
         'Content-Type': 'application/json'
     };
 
-    // 处理预检请求
     if (event.httpMethod === 'OPTIONS') {
-        return {
-            statusCode: 200,
-            headers,
-            body: ''
-        };
+        return { statusCode: 200, headers, body: '' };
     }
 
     try {
-        const { action } = JSON.parse(event.body || '{}');
+        const body = JSON.parse(event.body || '{}');
+        const { action } = body;
 
         if (action === 'getToken') {
-            // 获取访问令牌
             const tokenData = await getAccessToken();
             return {
                 statusCode: 200,
@@ -33,9 +28,9 @@ exports.handler = async (event, context) => {
         }
 
         if (action === 'getData') {
-            // 获取表格数据
-            const { token } = JSON.parse(event.body);
-            const sheetData = await getSheetData(token);
+            const { token } = body;
+            // 使用多维表格API
+            const sheetData = await getBitableData(token);
             return {
                 statusCode: 200,
                 headers,
@@ -50,7 +45,7 @@ exports.handler = async (event, context) => {
         };
 
     } catch (error) {
-        console.error('函数执行错误:', error);
+        console.error('云函数错误:', error);
         return {
             statusCode: 500,
             headers,
@@ -97,13 +92,14 @@ function getAccessToken() {
     });
 }
 
-// 获取表格数据
-function getSheetData(token) {
+// 使用多维表格API获取数据
+function getBitableData(token) {
     return new Promise((resolve, reject) => {
+        // 使用多维表格的记录列表API
         const options = {
             hostname: 'open.feishu.cn',
             port: 443,
-            path: '/open-apis/sheets/v2/spreadsheets/Je42sildNh5sJAtktSlc0azDnsb/values/Sheet1!A:E',
+            path: '/open-apis/bitable/v1/apps/Je42sildNh5sJAtktSlc0azDnsb/tables/tblDi6XlgQwpJXhk/records',
             method: 'GET',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -117,7 +113,32 @@ function getSheetData(token) {
             res.on('end', () => {
                 try {
                     const result = JSON.parse(data);
-                    resolve(result);
+                    console.log('多维表格响应:', result);
+                    
+                    if (result.code === 0 && result.data && result.data.items) {
+                        // 转换为前端期望的格式
+                        const values = [
+                            ['学号', '密码', '日期', '当日预估收益', '本月累计收益'] // 表头
+                        ];
+                        
+                        result.data.items.forEach(item => {
+                            const fields = item.fields;
+                            values.push([
+                                fields['学号'] || '',
+                                fields['密码'] || '',
+                                fields['日期'] || '',
+                                fields['当日预估收益'] || '0',
+                                fields['本月累计收益'] || '0'
+                            ]);
+                        });
+                        
+                        resolve({
+                            code: 0,
+                            data: { values: values }
+                        });
+                    } else {
+                        resolve(result);
+                    }
                 } catch (e) {
                     reject(e);
                 }
