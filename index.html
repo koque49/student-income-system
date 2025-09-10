@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学员收益查询系统</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="login-box">
+            <h1>🎯 学员收益查询</h1>
+            <p class="subtitle">请输入您的学号和密码</p>
+            
+            <form id="loginForm">
+                <div class="input-group">
+                    <label for="studentId">学号</label>
+                    <input type="text" id="studentId" placeholder="请输入学号" required>
+                </div>
+                
+                <div class="input-group">
+                    <label for="password">密码</label>
+                    <input type="password" id="password" placeholder="请输入密码" required>
+                </div>
+                
+                <button type="submit" class="login-btn">
+                    <span id="loginText">登录查询</span>
+                    <span id="loadingText" style="display:none;">登录中...</span>
+                </button>
+            </form>
+            
+            <div id="errorMessage" class="error-message" style="display:none;"></div>
+        </div>
+    </div>
+    
+    <script src="config.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
