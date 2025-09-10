@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的收益 - 学员收益查询系统</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="dashboard">
+            <div class="header">
+                <h1>📊 我的收益</h1>
+                <div class="user-info">
+                    <span id="studentInfo">学员：加载中...</span>
+                    <button id="logoutBtn" class="logout-btn">退出</button>
+                </div>
+            </div>
+            
+            <div class="stats-grid">
+                <div class="stat-card today">
+                    <h3>今日收益</h3>
+                    <div class="stat-value" id="todayIncome">¥0.00</div>
+                    <div class="stat-date" id="todayDate"></div>
+                </div>
+                
+                <div class="stat-card month">
+                    <h3>本月累计</h3>
+                    <div class="stat-value" id="monthIncome">¥0.00</div>
+                    <div class="stat-label">累计收益</div>
+                </div>
+                
+                <div class="stat-card trend">
+                    <h3>近7天平均</h3>
+                    <div class="stat-value" id="avgIncome">¥0.00</div>
+                    <div class="stat-label">日均收益</div>
+                </div>
+            </div>
+            
+            <div class="chart-section">
+                <h3>📈 收益趋势图（近30天）</h3>
+                <div class="chart-container">
+                    <canvas id="incomeChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="history-section">
+                <h3>📋 收益记录</h3>
+                <div class="history-table">
+                    <table id="historyTable">
+                        <thead>
+                            <tr>
+                                <th>日期</th>
+                                <th>当日收益</th>
+                                <th>月累计</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyBody">
+                            <tr>
+                                <td colspan="3" class="loading">加载中...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="config.js"></script>
+    <script src="dashboard.js"></script>
+</body>
+</html>
