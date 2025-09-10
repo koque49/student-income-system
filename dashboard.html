@@ -3,62 +3,77 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>我的收益 - 学员收益查询系统</title>
+    <title>收益仪表盘 - 学员收益查询系统</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <div class="container">
-        <div class="dashboard">
-            <div class="header">
-                <h1>📊 我的收益</h1>
-                <div class="user-info">
-                    <span id="studentInfo">学员：加载中...</span>
-                    <button id="logoutBtn" class="logout-btn">退出</button>
+        <div class="top-nav">
+            <div class="nav-left">
+                <h1>我的收益</h1>
+                <p id="studentInfo" class="student-info">学员：---</p>
+            </div>
+            <div class="nav-buttons">
+                <button id="refreshBtn" class="btn btn-secondary">🔄 刷新数据</button>
+                <button id="logoutBtn" class="btn btn-secondary">退出登录</button>
+            </div>
+        </div>
+
+        <div class="dashboard-grid">
+            <!-- 统计卡片 -->
+            <div class="stats-row">
+                <div class="stat-card">
+                    <div class="stat-icon">📈</div>
+                    <div class="stat-content">
+                        <div class="stat-label">今日收益</div>
+                        <div id="todayIncome" class="stat-value">¥0.00</div>
+                        <div id="todayDate" class="stat-date">--</div>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">💰</div>
+                    <div class="stat-content">
+                        <div class="stat-label">本月累计</div>
+                        <div id="monthIncome" class="stat-value">¥0.00</div>
+                        <div class="stat-date">当前月份</div>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">📊</div>
+                    <div class="stat-content">
+                        <div class="stat-label">近7天平均</div>
+                        <div id="avgIncome" class="stat-value">¥0.00</div>
+                        <div class="stat-date">日平均收益</div>
+                    </div>
                 </div>
             </div>
-            
-            <div class="stats-grid">
-                <div class="stat-card today">
-                    <h3>今日收益</h3>
-                    <div class="stat-value" id="todayIncome">¥0.00</div>
-                    <div class="stat-date" id="todayDate"></div>
-                </div>
-                
-                <div class="stat-card month">
-                    <h3>本月累计</h3>
-                    <div class="stat-value" id="monthIncome">¥0.00</div>
-                    <div class="stat-label">累计收益</div>
-                </div>
-                
-                <div class="stat-card trend">
-                    <h3>近7天平均</h3>
-                    <div class="stat-value" id="avgIncome">¥0.00</div>
-                    <div class="stat-label">日均收益</div>
-                </div>
-            </div>
-            
+
+            <!-- 图表区域 -->
             <div class="chart-section">
-                <h3>📈 收益趋势图（近30天）</h3>
+                <h2>收益趋势</h2>
                 <div class="chart-container">
                     <canvas id="incomeChart"></canvas>
                 </div>
             </div>
-            
+
+            <!-- 历史记录 -->
             <div class="history-section">
-                <h3>📋 收益记录</h3>
-                <div class="history-table">
-                    <table id="historyTable">
+                <h2>收益历史</h2>
+                <div class="table-container">
+                    <table class="history-table">
                         <thead>
                             <tr>
                                 <th>日期</th>
                                 <th>当日收益</th>
-                                <th>月累计</th>
+                                <th>累计收益</th>
                             </tr>
                         </thead>
                         <tbody id="historyBody">
                             <tr>
-                                <td colspan="3" class="loading">加载中...</td>
+                                <td colspan="3" class="loading">数据加载失败，请刷新页面重试</td>
                             </tr>
                         </tbody>
                     </table>
@@ -66,8 +81,7 @@
             </div>
         </div>
     </div>
-    
-    <script src="config.js"></script>
+
     <script src="dashboard.js"></script>
 </body>
 </html>
