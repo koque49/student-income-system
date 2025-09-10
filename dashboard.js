@@ -52,17 +52,19 @@ async function loadDashboardData() {
     
     try {
         // 检查是否有缓存数据
-        if (!currentUser.allData || currentUser.allData.length === 0) {
+        if (!currentUser.allData || !Array.isArray(currentUser.allData) || currentUser.allData.length === 0) {
             console.log('没有缓存数据，重新获取...');
             
             // 重新获取数据
             const sheetData = await getSheetData();
-            if (sheetData && sheetData.length > 0) {
+            console.log('获取到的原始数据:', sheetData);
+            
+            if (sheetData && Array.isArray(sheetData) && sheetData.length > 0) {
                 currentUser.allData = sheetData;
                 localStorage.setItem('currentUser', JSON.stringify(currentUser));
-                console.log('数据重新获取成功:', sheetData);
+                console.log('数据保存成功，数据行数:', sheetData.length);
             } else {
-                throw new Error('无法获取表格数据');
+                throw new Error('无法获取表格数据或数据格式错误');
             }
         }
         
@@ -70,7 +72,7 @@ async function loadDashboardData() {
         const userRecords = getUserRecords();
         console.log('用户记录:', userRecords);
         
-        if (userRecords.length === 0) {
+        if (userRecords.length === 0 || (userRecords.length === 1 && userRecords[0].dailyIncome === 0)) {
             console.log('没有找到用户记录，显示默认数据');
             showNoDataMessage();
             return;
@@ -97,25 +99,44 @@ async function loadDashboardData() {
 function getUserRecords() {
     console.log('获取用户记录...');
     
+    // 确保 allData 存在且是数组
     const allData = currentUser.allData || [];
     const userRecords = [];
     
     console.log('所有数据:', allData);
+    console.log('数据类型:', typeof allData, '是否为数组:', Array.isArray(allData));
     console.log('当前用户学号:', currentUser.studentId);
+    
+    // 检查是否有数据
+    if (!Array.isArray(allData) || allData.length === 0) {
+        console.log('没有数据或数据格式错误');
+        return [{
+            date: getTodayString(),
+            dailyIncome: 0,
+            monthlyTotal: 0
+        }];
+    }
     
     // 从第二行开始（跳过表头）
     for (let i = 1; i < allData.length; i++) {
         const row = allData[i];
         console.log(`检查第${i}行:`, row);
         
-        if (row && row[0] && row[0].toString().trim() === currentUser.studentId.toString().trim()) {
-            const record = {
-                date: row[2] || getTodayString(),
-                dailyIncome: parseFloat(row[3]) || 0,
-                monthlyTotal: parseFloat(row[4]) || 0
-            };
-            userRecords.push(record);
-            console.log('添加记录:', record);
+        if (row && Array.isArray(row) && row.length >= 5 && row[0]) {
+            const studentId = row[0].toString().trim();
+            const currentStudentId = currentUser.studentId.toString().trim();
+            
+            console.log('比较学号:', studentId, 'vs', currentStudentId);
+            
+            if (studentId === currentStudentId) {
+                const record = {
+                    date: row[2] || getTodayString(),
+                    dailyIncome: parseFloat(row[3]) || 0,
+                    monthlyTotal: parseFloat(row[4]) || 0
+                };
+                userRecords.push(record);
+                console.log('添加记录:', record);
+            }
         }
     }
     
@@ -132,6 +153,7 @@ function getUserRecords() {
     // 按日期排序（最新的在前）
     userRecords.sort((a, b) => new Date(b.date) - new Date(a.date));
     
+    console.log('最终用户记录:', userRecords);
     return userRecords;
 }
 
@@ -344,11 +366,13 @@ async function getAccessToken() {
         });
         
         const data = await response.json();
-        if (data.code === 0) {
+        console.log('令牌获取结果:', data);
+        
+        if (data.code === 0 && data.tenant_access_token) {
             accessToken = data.tenant_access_token;
             return true;
         } else {
-            throw new Error('获取访问令牌失败: ' + (data.msg || '未知错误'));
+            throw new Error('获取访问令牌失败: ' + (data.msg || data.error || '未知错误'));
         }
     } catch (error) {
         console.error('获取访问令牌错误:', error);
@@ -375,14 +399,18 @@ async function getSheetData() {
         });
         
         const data = await response.json();
-        if (data.code === 0) {
-            return data.data.values || [];
+        console.log('云函数返回的完整数据:', data);
+        
+        if (data.code === 0 && data.data && data.data.values) {
+            console.log('成功获取表格数据，行数:', data.data.values.length);
+            return data.data.values;
         } else {
-            throw new Error('获取数据失败: ' + (data.msg || '未知错误'));
+            console.error('云函数返回错误:', data);
+            throw new Error('获取数据失败: ' + (data.error || data.msg || '未知错误'));
         }
     } catch (error) {
         console.error('获取表格数据错误:', error);
-        return [];
+        throw error;
     }
 }
 
