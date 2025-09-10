@@ -37,29 +37,12 @@ exports.handler = async (event, context) => {
                 };
             }
             
-            // 先尝试获取工作表列表
-            try {
-                const sheetsInfo = await getSheetsList(token);
-                console.log('工作表信息:', sheetsInfo);
-                
-                // 然后获取数据
-                const sheetData = await getSheetData(token);
-                return {
-                    statusCode: 200,
-                    headers,
-                    body: JSON.stringify(sheetData)
-                };
-            } catch (error) {
-                console.error('获取数据失败:', error);
-                return {
-                    statusCode: 500,
-                    headers,
-                    body: JSON.stringify({ 
-                        error: '获取数据失败', 
-                        details: error.message
-                    })
-                };
-            }
+            const sheetData = await getSheetData(token);
+            return {
+                statusCode: 200,
+                headers,
+                body: JSON.stringify(sheetData)
+            };
         }
 
     } catch (error) {
@@ -95,7 +78,8 @@ function getAccessToken() {
             res.on('data', (chunk) => data += chunk);
             res.on('end', () => {
                 try {
-                    resolve(JSON.parse(data));
+                    const result = JSON.parse(data);
+                    resolve(result);
                 } catch (e) {
                     reject(e);
                 }
@@ -108,13 +92,14 @@ function getAccessToken() {
     });
 }
 
-// 获取工作表列表
-function getSheetsList(token) {
+function getSheetData(token) {
     return new Promise((resolve, reject) => {
+        console.log('获取表格数据...');
+
         const options = {
             hostname: 'open.feishu.cn',
             port: 443,
-            path: '/open-apis/sheets/v4/spreadsheets/Je42sildNh5sJAtktSlc0azDnsb/sheets',
+            path: '/open-apis/sheets/v4/spreadsheets/Je42sildNh5sJAtktSlc0azDnsb/values/R6PBsw!A1:E1000',
             method: 'GET',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -122,99 +107,38 @@ function getSheetsList(token) {
             }
         };
 
-        console.log('获取工作表列表...');
-
         const req = https.request(options, (res) => {
             let data = '';
-            console.log('工作表列表API响应状态:', res.statusCode);
+            console.log('API响应状态:', res.statusCode);
             
             res.on('data', (chunk) => data += chunk);
             res.on('end', () => {
                 try {
                     const result = JSON.parse(data);
-                    console.log('工作表列表结果:', result);
-                    resolve(result);
+                    console.log('API响应结果:', result);
+                    
+                    if (result.code === 0 && result.data && result.data.values) {
+                        console.log('数据获取成功，行数:', result.data.values.length);
+                        resolve({
+                            code: 0,
+                            data: { values: result.data.values }
+                        });
+                    } else {
+                        console.log('API返回错误:', result);
+                        resolve(result);
+                    }
                 } catch (e) {
+                    console.error('解析响应失败:', e);
                     reject(e);
                 }
             });
         });
 
-        req.on('error', reject);
+        req.on('error', (error) => {
+            console.error('请求错误:', error);
+            reject(error);
+        });
+
         req.end();
-    });
-}
-
-// 获取表格数据 - 尝试多种方式
-function getSheetData(token) {
-    return new Promise((resolve, reject) => {
-        // 尝试几种不同的API路径
-        const apiPaths = [
-            '/open-apis/sheets/v4/spreadsheets/Je42sildNh5sJAtktSlc0azDnsb/values/A1:E1000',
-            '/open-apis/sheets/v4/spreadsheets/Je42sildNh5sJAtktSlc0azDnsb/values/Sheet1!A1:E1000',
-            '/open-apis/sheets/v4/spreadsheets/Je42sildNh5sJAtktSlc0azDnsb/values/R6PBsw!A1:E1000'
-        ];
-
-        let currentPathIndex = 0;
-
-        function tryNextPath() {
-            if (currentPathIndex >= apiPaths.length) {
-                reject(new Error('所有API路径都失败了'));
-                return;
-            }
-
-            const currentPath = apiPaths[currentPathIndex];
-            console.log(`尝试API路径 ${currentPathIndex + 1}:`, currentPath);
-
-            const options = {
-                hostname: 'open.feishu.cn',
-                port: 443,
-                path: currentPath,
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            };
-
-            const req = https.request(options, (res) => {
-                let data = '';
-                console.log(`路径 ${currentPathIndex + 1} 响应状态:`, res.statusCode);
-                
-                res.on('data', (chunk) => data += chunk);
-                res.on('end', () => {
-                    try {
-                        const result = JSON.parse(data);
-                        console.log(`路径 ${currentPathIndex + 1} 结果:`, result);
-                        
-                        if (result.code === 0 && result.data && result.data.values) {
-                            console.log('成功获取数据！');
-                            resolve({
-                                code: 0,
-                                data: { values: result.data.values }
-                            });
-                        } else {
-                            console.log(`路径 ${currentPathIndex + 1} 失败，尝试下一个...`);
-                            currentPathIndex++;
-                            tryNextPath();
-                        }
-                    } catch (e) {
-                        console.error(`路径 ${currentPathIndex + 1} 解析失败:`, e);
-                        currentPathIndex++;
-                        tryNextPath();
-                    }
-                });
-            });
-
-            req.on('error', (error) => {
-                console.error(`路径 ${currentPathIndex + 1} 网络错误:`, error);
-                currentPathIndex++;
-                tryNextPath();
-            });
-
-            req.end();
-        }
-
-        tryNextPath();
     });
 }
