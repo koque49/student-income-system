@@ -47,8 +47,8 @@ exports.handler = async (event, context) => {
         }
 
         if (action === 'getData') {
-            // 获取表格数据
-            console.log('开始获取表格数据...');
+            // 获取电子表格数据
+            console.log('开始获取电子表格数据...');
             const { token } = body;
             if (!token) {
                 return {
@@ -57,8 +57,8 @@ exports.handler = async (event, context) => {
                     body: JSON.stringify({ error: '缺少访问令牌' })
                 };
             }
-            const sheetData = await getBitableData(token);
-            console.log('表格数据获取结果:', sheetData);
+            const sheetData = await getSheetData(token);
+            console.log('电子表格数据获取结果:', sheetData);
             return {
                 statusCode: 200,
                 headers,
@@ -133,15 +133,16 @@ function getAccessToken() {
     });
 }
 
-// 使用多维表格API获取数据
-function getBitableData(token) {
+// 使用电子表格API获取数据
+function getSheetData(token) {
     return new Promise((resolve, reject) => {
-        console.log('发送多维表格请求...');
+        console.log('发送电子表格请求...');
 
+        // 使用电子表格API
         const options = {
             hostname: 'open.feishu.cn',
             port: 443,
-            path: '/open-apis/bitable/v1/apps/Je42sildNh5sJAtktSlc0azDnsb/tables/tblDi6XlgQwpJXhk/records?page_size=500',
+            path: '/open-apis/sheets/v4/spreadsheets/Je42sildNh5sJAtktSlc0azDnsb/values/R6PBsw!A1:E1000',
             method: 'GET',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -151,47 +152,31 @@ function getBitableData(token) {
 
         const req = https.request(options, (res) => {
             let data = '';
-            console.log('多维表格响应状态:', res.statusCode);
+            console.log('电子表格响应状态:', res.statusCode);
             
             res.on('data', (chunk) => data += chunk);
             res.on('end', () => {
                 try {
                     const result = JSON.parse(data);
-                    console.log('多维表格响应数据:', result);
+                    console.log('电子表格响应数据:', result);
                     
-                    if (result.code === 0 && result.data && result.data.items) {
-                        // 转换为前端期望的格式
-                        const values = [
-                            ['学号', '密码', '日期', '当日预估收益', '本月累计收益'] // 表头
-                        ];
-                        
-                        result.data.items.forEach(item => {
-                            const fields = item.fields;
-                            values.push([
-                                fields['学号'] || '',
-                                fields['密码'] || '',
-                                fields['日期'] || '',
-                                fields['当日预估收益'] || '0',
-                                fields['本月累计收益'] || '0'
-                            ]);
-                        });
-                        
+                    if (result.code === 0 && result.data && result.data.values) {
                         resolve({
                             code: 0,
-                            data: { values: values }
+                            data: { values: result.data.values }
                         });
                     } else {
                         resolve(result);
                     }
                 } catch (e) {
-                    console.error('解析多维表格响应失败:', e);
+                    console.error('解析电子表格响应失败:', e);
                     reject(e);
                 }
             });
         });
 
         req.on('error', (error) => {
-            console.error('多维表格请求错误:', error);
+            console.error('电子表格请求错误:', error);
             reject(error);
         });
 
